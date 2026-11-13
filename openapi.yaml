@@ -1,0 +1,420 @@
+openapi: 3.1.0
+info:
+  title: BioCrédito Agro — API de originação, crédito embutido e fundo
+  version: 1.0.0
+  summary: Integração entre cooperativa (originadora), agfintech/SEP (crédito) e fundo com cotas (funding).
+  description: |
+    Fluxo:
+      1. A cooperativa envia o pacote de originação de um talhão (POST /v1/originacoes).
+      2. A agfintech decide e devolve a oferta (resposta síncrona ou webhook `decisao.emitida`).
+      3. O produtor aceita a oferta; a agfintech emite a CCB e registra a CPR (POST /v1/originacoes/{id}/aceite).
+      4. Cada marco do contrato inteligente é informado com hash das evidências (POST /v1/contratos/{id}/marcos).
+         O marco `entregue` dispara o pagamento direto ao fornecedor (Res. CMN 5.159/2024).
+      5. Os direitos creditórios podem ser cedidos a um fundo com cotas sênior e subordinada
+         (POST /v1/fundos/{id}/cessoes); a carteira é acompanhada em GET /v1/fundos/{id}/carteira.
+
+    Convenções: valores em BRL; datas ISO 8601 (UTC); dados pessoais só por identificador pseudonimizado;
+    todo POST aceita o cabeçalho Idempotency-Key. Os títulos jurídicos (CCB, CPR, cotas) vivem nas
+    registradoras e no administrador do fundo; esta API e a DLT guardam estados e hashes.
+  license:
+    name: A definir pelos parceiros
+servers:
+  - url: https://api.agfintech.example/v1-sandbox
+    description: Sandbox (substituir pela URL do parceiro)
+security:
+  - oauth2: [originacao:escrever, contratos:escrever, fundos:ler]
+tags:
+  - name: Originação
+  - name: Contratos
+  - name: Fundo
+paths:
+  /v1/originacoes:
+    post:
+      tags: [Originação]
+      operationId: criarOriginacao
+      summary: Envia o pacote de originação de uma operação
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PacoteOriginacao' }
+      responses:
+        '200':
+          description: Decisão síncrona
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Decisao' }
+        '202':
+          description: Recebido; a decisão chegará pelo webhook decisao.emitida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Recebimento' }
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Invalido' }
+  /v1/originacoes/{id}:
+    get:
+      tags: [Originação]
+      operationId: obterOriginacao
+      summary: Situação e decisão de uma originação
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Decisao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+  /v1/originacoes/{id}/aceite:
+    post:
+      tags: [Originação]
+      operationId: aceitarOferta
+      summary: Produtor aceita a oferta; emite CCB e registra CPR
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assinatura]
+              properties:
+                assinatura:
+                  type: object
+                  required: [tipo, evidencia_hash]
+                  properties:
+                    tipo: { enum: [icp_brasil, avancada_gov_br, plataforma] }
+                    evidencia_hash: { $ref: '#/components/schemas/Hash' }
+      responses:
+        '201':
+          description: Contrato criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contrato' }
+        '409': { $ref: '#/components/responses/Conflito' }
+  /v1/contratos/{id}:
+    get:
+      tags: [Contratos]
+      operationId: obterContrato
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contrato' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+  /v1/contratos/{id}/marcos:
+    post:
+      tags: [Contratos]
+      operationId: registrarMarco
+      summary: Registra um marco do contrato inteligente com hash das evidências
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Marco' }
+      responses:
+        '201':
+          description: Marco aceito; estado do contrato atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contrato' }
+        '409':
+          description: Marco fora de ordem (ex. `aplicada` antes de `entregue`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+  /v1/fundos/{id}/cessoes:
+    post:
+      tags: [Fundo]
+      operationId: cederAoFundo
+      summary: Cede direitos creditórios (e, opcionalmente, recebíveis de carbono) ao fundo
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Cessao' }
+      responses:
+        '201':
+          description: Cessão registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cessao' }
+        '422': { $ref: '#/components/responses/Invalido' }
+  /v1/fundos/{id}/carteira:
+    get:
+      tags: [Fundo]
+      operationId: obterCarteira
+      summary: Posição da carteira, inadimplência e índice de subordinação
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Carteira' }
+webhooks:
+  decisao.emitida:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Decisao' }
+      responses: { '200': { description: Recebido } }
+  pagamento.fornecedor.liberado:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Evento' }
+      responses: { '200': { description: Recebido } }
+  parcela.paga:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Evento' }
+      responses: { '200': { description: Recebido } }
+  inadimplencia.registrada:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Evento' }
+      responses: { '200': { description: Recebido } }
+  credito_carbono.emitido:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Evento' }
+      responses: { '200': { description: Recebido } }
+  fundo.subordinacao_abaixo_minimo:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Evento' }
+      responses: { '200': { description: Recebido } }
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: Client credentials, com mTLS entre as instituições.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.agfintech.example/oauth/token
+          scopes:
+            originacao:escrever: Enviar pacotes e aceites
+            contratos:escrever: Registrar marcos
+            fundos:ler: Consultar carteira do fundo
+            fundos:escrever: Ceder direitos creditórios
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, maxLength: 64 }
+  responses:
+    Invalido:
+      description: Pacote ou corpo inválido
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    Conflito:
+      description: Já processado com outro conteúdo, ou estado incompatível
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    NaoEncontrado:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+  schemas:
+    Hash:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: SHA-256 em hexadecimal
+    PacoteOriginacao:
+      type: object
+      description: Gerado por originacao.gerar_pacote(); esquema completo em originacao.ESQUEMA_PACOTE.
+      required: [versao_schema, id_pacote, gerado_em, canal, originador, produtor, imovel, cultura, solo,
+                 biocarvao, operacao, simulacao, garantias, integridade]
+      properties:
+        versao_schema: { const: biocredito.originacao/1.0 }
+        id_pacote: { type: string, format: uuid }
+        gerado_em: { type: string, format: date-time }
+        canal: { enum: [credito_embutido_agfintech, p2p_sep, fundo_cotas] }
+        originador:
+          type: object
+          properties:
+            tipo: { const: cooperativa }
+            nome: { type: string }
+            cnpj: { type: string }
+        produtor:
+          type: object
+          properties:
+            id_pseudonimo: { type: string }
+            consentimento:
+              type: object
+              properties:
+                concedido: { const: true }
+                base_legal: { type: string }
+                finalidades:
+                  type: array
+                  items: { enum: [analise_credito, registro_garantias, certificacao_carbono, pesquisa_anonimizada] }
+                data: { type: string, format: date }
+        imovel:
+          type: object
+          properties:
+            codigo_car: { type: string }
+            municipio: { type: string }
+            uf: { type: string }
+            lat: { type: [number, 'null'] }
+            lon: { type: [number, 'null'] }
+            area_ha: { type: number }
+        cultura: { type: object }
+        solo: { type: object }
+        biocarvao: { type: object }
+        operacao:
+          type: object
+          properties:
+            custo_inicial_r: { type: number }
+            principal_r: { type: number }
+            taxa_anual: { type: number }
+            carencia_anos: { type: integer }
+            prazo_anos: { type: integer }
+            cronograma_r: { type: array, items: { type: number } }
+            pagamento_direto_fornecedor: { type: boolean }
+        simulacao:
+          type: object
+          properties:
+            prob_viavel_pela_regra: { type: number }
+            prob_vpl_pos_sem_carbono: { type: number }
+            prob_vpl_pos_com_carbono: { type: number }
+            prob_inadimplencia: { type: number }
+            perda_esperada_pct_principal: { type: number }
+            duas_vantagens: { type: object }
+        carbono: { type: object }
+        garantias: { type: array, items: { type: object } }
+        funding: { type: object }
+        marcos_contrato: { type: array, items: { type: string } }
+        integridade:
+          type: object
+          properties:
+            algoritmo: { const: SHA-256 }
+            hash: { $ref: '#/components/schemas/Hash' }
+    Recebimento:
+      type: object
+      required: [id_originacao, status]
+      properties:
+        id_originacao: { type: string }
+        status: { const: em_analise }
+    Decisao:
+      type: object
+      required: [id_originacao, status]
+      properties:
+        id_originacao: { type: string }
+        status: { enum: [em_analise, aprovado, recusado, pendente_documentos] }
+        modo: { enum: [api, simulado] }
+        oferta:
+          type: [object, 'null']
+          properties:
+            principal_r: { type: number }
+            taxa_anual: { type: number }
+            prazo_anos: { type: integer }
+            carencia_anos: { type: integer }
+            garantias_exigidas: { type: array, items: { type: string } }
+            validade_dias: { type: integer }
+        motivos: { type: array, items: { type: string } }
+        hash_pacote: { $ref: '#/components/schemas/Hash' }
+    Contrato:
+      type: object
+      required: [id_contrato, id_originacao, estado]
+      properties:
+        id_contrato: { type: string }
+        id_originacao: { type: string }
+        ccb_numero: { type: string }
+        cpr_registro:
+          type: object
+          properties:
+            registradora: { type: string }
+            codigo: { type: string }
+        estado:
+          enum: [proposta, financiada, lote_certificado, entregue, aplicada, safra, credito_emitido,
+                 monitoramento, liquidado, inadimplente]
+        endereco_dlt: { type: string, description: Endereço do contrato espelho na DLT permissionada }
+        marcos: { type: array, items: { $ref: '#/components/schemas/Marco' } }
+    Marco:
+      type: object
+      required: [tipo, ocorrido_em, evidencias]
+      properties:
+        tipo: { enum: [lote_certificado, entregue, aplicada, safra, credito_emitido, monitoramento] }
+        ocorrido_em: { type: string, format: date-time }
+        evidencias:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [tipo, hash]
+            properties:
+              tipo: { enum: [laudo_biocarvao, nota_fiscal, foto_georreferenciada, registro_aplicacao,
+                             entrega_safra, certificado_carbono, laudo_solo, laudo_bioas, ndvi] }
+              hash: { $ref: '#/components/schemas/Hash' }
+              uri: { type: string, description: Local do documento fora da cadeia }
+        dados:
+          type: object
+          description: Valores do marco (ex. H/Corg do lote, dose aplicada, tCO2e emitidas)
+    Cessao:
+      type: object
+      required: [ids_contratos, valor_cessao_r]
+      properties:
+        id_cessao: { type: string }
+        ids_contratos: { type: array, items: { type: string }, minItems: 1 }
+        valor_cessao_r: { type: number }
+        inclui_recebiveis_carbono: { type: boolean, default: false }
+        frac_carbono_cedida: { type: number, minimum: 0, maximum: 1 }
+        registro_direitos_creditorios: { type: string, description: Código na entidade registradora }
+    Carteira:
+      type: object
+      properties:
+        data_base: { type: string, format: date }
+        pl_r: { type: number }
+        cota_senior_r: { type: number }
+        cota_senior_p2p_r: { type: number }
+        cota_subordinada_r: { type: number }
+        indice_subordinacao: { type: number }
+        subordinacao_minima: { type: number }
+        inadimplencia_carteira: { type: number }
+        operacoes_ativas: { type: integer }
+    Evento:
+      type: object
+      required: [tipo, ocorrido_em, referencia]
+      properties:
+        tipo: { type: string }
+        ocorrido_em: { type: string, format: date-time }
+        referencia: { type: string, description: id do contrato, da originação ou do fundo }
+        dados: { type: object }
+    Erro:
+      type: object
+      required: [codigo, mensagem]
+      properties:
+        codigo: { type: string }
+        mensagem: { type: string }
+        detalhes: { type: array, items: { type: string } }
