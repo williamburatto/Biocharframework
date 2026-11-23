@@ -103,7 +103,7 @@ def detalhar_municipio(cenario: Cenario, perfis: pd.DataFrame, uf: str, municipi
 
 
 def avaliar_municipios(cenario: Cenario, perfis: pd.DataFrame, ufs=("PR", "SC"),
-                       min_perfis: int = 3, n_simulacoes: int = 2000) -> pd.DataFrame:
+                       min_perfis: int = 3, n_simulacoes: int = 10_000) -> pd.DataFrame:
     c = copy.deepcopy(cenario)
     c.simulacao.n_simulacoes = n_simulacoes
     c.resposta.media = None                      # a resposta vem dos perfis de cada município

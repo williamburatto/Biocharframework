@@ -99,6 +99,10 @@ Regras de decisão: `produtividade` (só a vantagem agronômica conta; carbono �
 
 A resposta de produtividade depende de pH, V%, argila e C orgânico (`resposta_media_vetor`). Textura e C entram porque a calagem não os altera, e assim as regiões se diferenciam mesmo com a correção de manejo. Todos os fatores são hipóteses a calibrar com ensaios.
 
+## Versão em inglês
+
+`app_en.py` é a interface em inglês, com a mesma lógica (ver `README_EN.md`). No Streamlit Cloud, crie um segundo app no mesmo repositório com o arquivo principal `app_en.py`. Ela é gerada a partir do `app.py` por `python gerar_app_en.py`; depois de mudar o `app.py`, rode o gerador de novo.
+
 ## Abas do app
 
 1. **Meu município**: escolha um município do PR ou de SC e veja o veredito de viabilidade, o aumento de produtividade (%, t/ha, sacas/ha e R$/ha/ano), o carbono retido no solo e o crédito, a chance de o investimento se pagar com e sem carbono, o que precisaria mudar para ficar viável e o solo comparado ao estado.
@@ -149,3 +153,14 @@ Valores padrão são ilustrativos. Antes de usar em artigo ou decisão de crédi
 1. Calibre a heurística `sugerir_resposta_media` com ensaios de campo.
 2. Confirme os coeficientes do fator de permanência (`perm_intercepto`, `perm_inclinacao`, ajuste de temperatura) na tabela da metodologia escolhida (EBC/WBC, Puro.earth, Verra VM0044, Isometric).
 3. Substitua `e_acv_tco2e_t` pela ACV do fornecedor.
+
+## Aba Mercados de carbono
+
+`mercados.py` guarda regras e preços do SBCE, GX-ETS/J-Credit (Japão), CRCF/Puro e EU ETS (UE) e Califórnia; `aba_mercados.py` desenha a aba (PT e EN). Atualize os preços em `MERCADOS` antes de publicar. Use ao menos 10.000 simulações por município: muitos municípios ficam perto do limiar de 0,70.
+
+## Início rápido (assistente) e resposta instantânea
+
+- `assistente.py`: lógica do assistente (cenário padrão em 3 respostas, semáforo, explicação, "o que mudaria" por bisseção, confiança, relatório PDF e cenários pré-calculados).
+- `aba_inicio.py`: aba "Início rápido" (PT) / "Quick start" (EN). `aba_brasil.py` ganhou o modo de resposta instantânea.
+- `precalculado.csv`: 11.088 combinações pré-calculadas. Para regenerar após mudar o modelo: `python assistente.py` (≈2 min).
+- Requer `reportlab` (já em requirements.txt) para o relatório em PDF.

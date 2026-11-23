@@ -1,0 +1,12 @@
+zona,uso,amostras,quadriculas,ph_mediano,ph_min,ph_max,frac_ph_menor_5_5,c_gkg_mediano,densidade_mediana,estoque_c_0_15cm_tha
+Easterly Lowlands England,Arable,67,21,7.66,5.13,8.38,0.03,26.5,1.252,48.39
+Westerly Lowlands England,Improved grassland,34,13,5.585,5.07,7.78,0.38,41.8,1.0455,64.63
+Easterly Lowlands England,Improved grassland,25,14,6.08,4.81,8.04,0.20,40.0,1.087,63.37
+Lowlands Scotland,Improved grassland,21,7,5.47,4.73,6.81,0.52,56.7,0.783,68.3
+Westerly Lowlands England,Arable,18,9,6.41,5.16,7.31,0.06,32.35,1.07,54.245
+Lowlands Scotland,Arable,13,5,5.67,3.86,6.85,0.38,36.9,0.803,47.55
+Uplands England,Improved grassland,9,6,5.8,5.22,6.59,0.22,56.2,0.833,69.86
+Uplands Wales,Improved grassland,5,3,5.52,4.3,5.93,0.40,58.6,0.772,73.69
+Lowlands Wales,Improved grassland,4,2,5.385,5.17,5.96,0.75,35.3,1.088,57.72
+Uplands England,Arable,2,2,7.095,6.68,7.51,0.00,33.05,1.246,62.235
+Lowlands Wales,Arable,1,1,5.97,5.97,5.97,0.00,39.8,0.977,58.36

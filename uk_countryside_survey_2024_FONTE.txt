@@ -1,0 +1,1 @@
+# Fonte: Bentley et al. (2025) Topsoil physico-chemical properties from the UKCEH Countryside Survey, Great Britain, 2024. EIDC, doi:10.5285/cab9f36c-075e-4359-8781-24a8488641c3 (OGL). Parcelas aleatórias (PLOT_TYPE=X), Arable and Horticulture e Improved Grassland, sem solos orgânicos; agregação feita no navegador em 21/11/2026.
